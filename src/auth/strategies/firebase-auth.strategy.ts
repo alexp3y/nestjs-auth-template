@@ -1,7 +1,7 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
-import admin, { ServiceAccount, app } from 'firebase-admin';
+import admin, { ServiceAccount, auth } from 'firebase-admin';
+import { getApps } from 'firebase-admin/app';
 import { ExtractJwt, Strategy } from 'passport-firebase-jwt';
 import * as serviceAccount from './service-account-key.json';
 
@@ -11,20 +11,21 @@ export class FirebaseAuthStrategy extends PassportStrategy(
   'firebase-auth',
 ) {
   private readonly _logger = new Logger(FirebaseAuthStrategy.name);
-  private _firebase: app.App;
+  private _firebase;
 
-  constructor(private readonly _configService: ConfigService) {
+  constructor() {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
     });
-    this._firebase = admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount as ServiceAccount),
-    });
+    this._firebase = getApps().length
+      ? getApps()[0]
+      : admin.initializeApp({
+          credential: admin.credential.cert(serviceAccount as ServiceAccount),
+        });
   }
 
   async validate(token: string) {
-    const currentUser = await this._firebase
-      .auth()
+    const currentUser = await auth()
       .verifyIdToken(token, true)
       .catch((err) => {
         this._logger.error(err);
@@ -34,7 +35,7 @@ export class FirebaseAuthStrategy extends PassportStrategy(
     if (!currentUser) {
       throw new UnauthorizedException();
     }
-
+    this._logger.debug(JSON.stringify(currentUser));
     return currentUser;
   }
 }
